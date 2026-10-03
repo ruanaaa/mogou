@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#6366f1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>墨构</title>
+<style>
+:root{--bg:#0f172a;--panel:#1e293b;--line:#334155;--fg:#e2e8f0;--dim:#94a3b8;--accent:#6366f1}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100dvh;overflow:hidden}
+body{font:16px/1.5 -apple-system,"PingFang SC",sans-serif;background:var(--bg);color:var(--fg);display:flex;flex-direction:column}
+#app{display:flex;flex-direction:column;height:100dvh}
+header{display:flex;align-items:center;gap:10px;padding:12px 14px;padding-top:calc(12px + env(safe-area-inset-top));background:var(--panel);border-bottom:1px solid var(--line);flex-shrink:0}
+header h1{font-size:15px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:9px 14px;font:inherit;font-size:14px;cursor:pointer}
+button.ghost{background:transparent;color:var(--dim);border:1px solid var(--line)}
+button:disabled{opacity:.4}
+main{flex:1;overflow-y:auto;padding:14px;-webkit-overflow-scrolling:touch;padding-bottom:calc(14px + env(safe-area-inset-bottom))}
+input,textarea,select{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:10px;font:inherit;outline:none}
+textarea{resize:none}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px;cursor:pointer}
+.card h3{font-size:15px;margin-bottom:4px}
+.card p{font-size:12px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tabs{display:flex;background:var(--panel);border-bottom:1px solid var(--line);flex-shrink:0}
+.tabs button{flex:1;background:transparent;color:var(--dim);border-radius:0;padding:12px 8px;font-size:13px}
+.tabs button.on{color:#fff;box-shadow:inset 0 -2px 0 var(--accent)}
+.hint{font-size:12px;color:#64748b;line-height:1.6}
+.empty{text-align:center;padding:60px 20px;color:#64748b;font-size:14px;line-height:1.8}
+.row{display:flex;gap:8px}
+.row>*{flex:1}
+.mb{margin-bottom:10px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const PROVIDERS={
+  deepseek:{label:'DeepSeek',url:'https://api.deepseek.com/v1',models:['deepseek-chat','deepseek-reasoner']},
+  groq:{label:'Groq',url:'https://api.groq.com/openai/v1',models:['llama-3.3-70b-versatile','llama-3.1-8b-instant']},
+  gemini:{label:'Gemini',url:'https://generativelanguage.googleapis.com/v1beta/openai',models:['gemini-2.0-flash','gemini-1.5-flash']},
+  openrouter:{label:'OpenRouter',url:'https://openrouter.ai/api/v1',models:['deepseek/deepseek-chat-v3-0324:free','meta-llama/llama-3.3-70b-instruct:free']}
+};
+let S=JSON.parse(localStorage.getItem('mogou')||'null')||{novels:[],settings:{provider:'deepseek',model:'deepseek-chat',keys:{}}};
+const persist=()=>localStorage.setItem('mogou',JSON.stringify(S));
+let V='shelf',N=null,C=null,T='write',aiBuf='';
+
+function render(){const a=$('app');a.innerHTML=V==='shelf'?shelf():novel();hook()}
+
+function shelf(){
+  const list=S.novels.map(n=>`<div class="card" data-open="${n.id}"><h3>${esc(n.title)}</h3><p>${esc(n.synopsis||'暂无简介')} · ${n.chapters.length}章</p></div>`).join('');
+  return `<header><h1>墨构 · AI小说工坊</h1><button data-act="newNovel">+ 新建</button></header><main>${list||'<div class="empty">还没有作品<br>点右上角「+ 新建」</div>'}</main>`;
+}
+
+function novel(){
+  const tabs=['write','ai','settings'].map(k=>`<button class="${T===k?'on':''}" data-tab="${k}">${{write:'写作',ai:'AI',settings:'设置'}[k]}</button>`).join('');
+  return `<header><button class="ghost" data-act="back" style="padding:8px 12px">←</button><h1>${esc(N.title)}</h1></header><div class="tabs">${tabs}</div>${T==='write'?writeView():T==='ai'?aiView():settingsView()}`;
+}
+
+function writeView(){
+  const chs=N.chapters.map(c=>`<div class="chapter ${C?.id===c.id?'on':''}" data-ch="${c.id}" style="padding:10px;border-bottom:1px solid #334155;font-size:13px;cursor:pointer;${C?.id===c.id?'background:var(--line)':''}">${esc(c.title)}</div>`).join('');
+  return `<div style="flex:1;display:flex;overflow:hidden">
+    <div style="width:100px;overflow-y:auto;background:var(--panel);border-right:1px solid var(--line);flex-shrink:0">${chs}<div style="padding:8px;text-align:center"><button data-act="newChapter" style="padding:6px 10px;font-size:12px">+ 章</button></div></div>
+    <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+      <input id="ct" value="${esc(C?.title||'')}" placeholder="章节标题" style="border:0;border-radius:0;border-bottom:1px solid var(--line);font-weight:600;flex-shrink:0">
+      <textarea id="cc" placeholder="开始写……" style="flex:1;border:0;border-radius:0;padding:14px;line-height:1.7;font-family:Georgia,serif">${esc(C?.content||'')}</textarea>
+      <div style="padding:8px 14px;font-size:11px;color:#64748b;border-top:1px solid var(--line);flex-shrink:0">已自动保存 · <span id="wc">${(C?.content||'').replace(/\s/g,'').length}</span> 字</div>
+    </div></div>`;
+}
+
+function aiView(){
+  const p=PROVIDERS[S.settings.provider];
+  const opts=Object.entries(PROVIDERS).map(([k,v])=>`<option value="${k}" ${S.settings.provider===k?'selected':''}>${v.label}</option>`).join('');
+  const mopts=p.models.map(m=>`<option ${S.settings.model===m?'selected':''}>${m}</option>`).join('');
+  return `<main>
+    <div class="row mb"><select id="pv">${opts}</select><select id="md">${mopts}</select></div>
+    <div class="row mb"><button data-act="aiContinue">续写</button><button data-act="aiPolish">润色选中</button></div>
+    <input id="instr" placeholder="补充要求（可选）" class="mb">
+    <div id="aio" style="background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;font-size:14px;line-height:1.7;white-space:pre-wrap;min-height:120px">点上方按钮开始生成</div>
+    <button id="aia" data-act="aiApply" style="width:100%;margin-top:10px" disabled>追加到正文末尾</button></main>`;
+}
+
+function settingsView(){
+  const keys=Object.entries(PROVIDERS).map(([k,v])=>`<div class="mb"><div class="hint">${v.label} API Key</div><input type="password" data-k="${k}" value="${esc(S.settings.keys[k]||'')}" placeholder="留空表示不用" style="font-family:monospace;font-size:13px;margin-top:4px"></div>`).join('');
+  return `<main><p class="hint mb">密钥只保存在本机浏览器，不会上传。至少填一个即可使用 AI 功能。</p>${keys}<button data-act="saveKeys" style="width:100%">保存</button><p class="hint" style="margin-top:14px">获取 Key：<br>DeepSeek → platform.deepseek.com<br>Groq → console.groq.com<br>Gemini → aistudio.google.com<br>OpenRouter → openrouter.ai/keys</p></main>`;
+}
+
+function hook(){
+  document.querySelectorAll('[data-open]').forEach(el=>el.onclick=()=>{N=S.novels.find(n=>n.id===el.dataset.open);C=N.chapters[0]||null;V='novel';T='write';render()});
+  document.querySelectorAll('[data-act]').forEach(el=>el.onclick=()=>act(el.dataset.act));
+  document.querySelectorAll('[data-tab]').forEach(el=>el.onclick=()=>{T=el.dataset.tab;render()});
+  document.querySelectorAll('[data-ch]').forEach(el=>el.onclick=()=>{C=N.chapters.find(c=>c.id===el.dataset.ch);render()});
+  const ct=$('ct');if(ct)ct.oninput=e=>{C.title=e.target.value;persist()};
+  const cc=$('cc');if(cc)cc.oninput=e=>{C.content=e.target.value;persist();$('wc').textContent=e.target.value.replace(/\s/g,'').length};
+  const pv=$('pv');if(pv)pv.onchange=e=>{S.settings.provider=e.target.value;S.settings.model=PROVIDERS[e.target.value].models[0];persist();render()};
+  const md=$('md');if(md)md.onchange=e=>{S.settings.model=e.target.value;persist()};
+}
+
+function act(a){
+  if(a==='newNovel'){const t=prompt('作品名：');if(!t)return;const n={id:uid(),title:t,synopsis:'',chapters:[{id:uid(),title:'第一章',content:''}]};S.novels.push(n);persist();N=n;C=n.chapters[0];V='novel';T='write';render()}
+  else if(a==='back'){V='shelf';persist();render()}
+  else if(a==='newChapter'){const c={id:uid(),title:'第'+(N.chapters.length+1)+'章',content:''};N.chapters.push(c);C=c;persist();render()}
+  else if(a==='saveKeys'){document.querySelectorAll('[data-k]').forEach(el=>S.settings.keys[el.dataset.k]=el.value.trim());persist();alert('已保存')}
+  else if(a==='aiContinue')aiRun('continue');
+  else if(a==='aiPolish')aiRun('polish');
+  else if(a==='aiApply'){if(!aiBuf||!C)return;C.content=(C.content||'')+'\n\n'+aiBuf;persist();alert('已追加');aiBuf='';$('aia').disabled=true}
+}
+
+async function aiRun(task){
+  const p=PROVIDERS[S.settings.provider];
+  const key=S.settings.keys[S.settings.provider];
+  if(!key){alert('请先在「设置」里填 '+p.label+' 的 API Key');return}
+  const out=$('aio');out.textContent='生成中……';aiBuf='';
+  const ctx=(C?.content||'').slice(-800);
+  let q='';
+  if(task==='continue'){q='以下是小说的已有内容：\n\n'+(ctx||'（还没有内容，请自由开篇）')+'\n\n请顺着上文自然续写约600字，承接语气与情节。只输出续写正文。'}
+  else{const sel=window.getSelection()?.toString()||'';const tgt=sel||ctx;if(!tgt){alert('请先在正文里选中一段文字，或在章节里有内容');return}q='请润色以下文字，优化用词与节奏，不改变情节。只输出润色后的文本：\n\n'+tgt}
+  const extra=$('instr')?.value.trim();if(extra)q+='\n\n额外要求：'+extra;
+  try{
+    const res=await fetch(p.url+'/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},body:JSON.stringify({model:S.settings.model,messages:[{role:'system',content:'你是资深中文网络小说作家，语言流畅，注重细节与画面感。只输出正文。'},{role:'user',content:q}],stream:true,temperature:0.9})});
+    if(!res.ok)throw new Error(await res.text());
+    const rd=res.body.getReader(),dec=new TextDecoder();let buf='';out.textContent='';
+    while(true){const{done,value}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});const ls=buf.split('\n');buf=ls.pop();for(const l of ls){const t=l.trim();if(!t.startsWith('data:'))continue;const d=t.slice(5).trim();if(d==='[DONE]')continue;try{const j=JSON.parse(d);const x=j.choices?.[0]?.delta?.content;if(x){aiBuf+=x;out.textContent=aiBuf;out.scrollTop=out.scrollHeight}}catch{}}}
+    $('aia').disabled=false;
+  }catch(e){out.textContent='错误：'+e.message}
+}
+
+render();
+if('serviceWorker' in navigator && location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
