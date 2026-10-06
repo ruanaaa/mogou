@@ -37,15 +37,15 @@ textarea{resize:none}
 </head>
 <body>
 <div id="app"></div>
-<script>
-const $=id=>document.getElementById(id);
-const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const PROVIDERS={
-  deepseek:{label:'DeepSeek',url:'https://api.deepseek.com/v1',models:['deepseek-chat','deepseek-reasoner']},
-  groq:{label:'Groq',url:'https://api.groq.com/openai/v1',models:['llama-3.3-70b-versatile','llama-3.1-8b-instant']},
-  gemini:{label:'Gemini',url:'https://generativelanguage.googleapis.com/v1beta/openai',models:['gemini-2.0-flash','gemini-1.5-flash']},
-  openrouter:{label:'OpenRouter',url:'https://openrouter.ai/api/v1',models:['deepseek/deepseek-chat-v3-0324:free','meta-llama/llama-3.3-70b-instruct:free']}
+  sensenova:{label:'日日新（免费）',url:'https://token.sensenova.cn/v1',models:['sensenova-6.7-flash-lite','deepseek-v4-flash','sensenova-u1-fast']},
+  agnes:{label:'Agnes（免费）',url:'https://apihub.agnes-ai.cn/v1',models:['agnes-3.0-flash','agnes-2.0-flash']},
+  modelscope:{label:'魔搭（免费）',url:'https://api-inference.modelscope.cn/v1',models:['Qwen/Qwen3-235B-A22B-Instruct-2507','deepseek-ai/DeepSeek-V4-Flash','ZhipuAI/GLM-4.7-Flash']},
+  groq:{label:'Groq（免费·极速）',url:'https://api.groq.com/openai/v1',models:['gpt-oss-120b','qwen3.6-27b']},
+  gemini:{label:'Gemini（免费）',url:'https://generativelanguage.googleapis.com/v1beta/openai',models:['gemini-2.5-flash','gemini-2.5-flash-lite']},
+  cerebras:{label:'Cerebras（免费）',url:'https://api.cerebras.ai/v1',models:['qwen-3-235b','llama-3.3-70b']},
+  openrouter:{label:'OpenRouter',url:'https://openrouter.ai/api/v1',models:['deepseek/deepseek-chat-v3-0324:free','qwen/qwen3-coder-480b:free']},
+  deepseek:{label:'DeepSeek（付费）',url:'https://api.deepseek.com/v1',models:['deepseek-chat','deepseek-reasoner']}
 };
 let S=JSON.parse(localStorage.getItem('mogou')||'null')||{novels:[],settings:{provider:'deepseek',model:'deepseek-chat',keys:{}}};
 const persist=()=>localStorage.setItem('mogou',JSON.stringify(S));
